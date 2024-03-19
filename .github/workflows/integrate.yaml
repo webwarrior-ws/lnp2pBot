@@ -57,12 +57,10 @@ jobs:
           
           mongosh --eval 'db.getSiblingDB("lnp2pbot").createCollection("mycollection")'
 
-      - name: Install TSC v5.3.3
-        run: |
-          npm install -g typescript@5.3.3
-          tsc --version
       - run: npm install @types/node @types/i18n
-      - run: tsc
+      - run: |
+          npx tsc --version
+          npx tsc
       - run: npm ci
       - name: Run tests
         env:
