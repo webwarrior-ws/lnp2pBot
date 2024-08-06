@@ -1,11 +1,14 @@
 /* eslint-disable no-underscore-dangle */
 // @ts-check
-const { logger } = require('../../../logger');
-const { showUserCommunitiesMessage } = require('./messages');
-const { Community, Order } = require('../../../models');
-const { validateParams, validateObjectId } = require('../../validations');
+import { logger } from '../../../logger';
+import { showUserCommunitiesMessage } from './messages';
+import { Community, Order } from '../../../models';
+import { validateParams, validateObjectId } from '../../validations';
+import { MainContext } from '../../start';
+import { CommunityContext } from './communityContext';
+import { Telegraf } from 'telegraf';
 
-async function getOrderCountByCommunity() {
+async function getOrderCountByCommunity(): Promise<number[]> {
   const data = await Order.aggregate([
     { $group: { _id: '$community_id', total: { $count: {} } } },
   ]);
@@ -15,33 +18,29 @@ async function getOrderCountByCommunity() {
   }, {});
 }
 
-async function findCommunities(currency) {
+async function findCommunities(currency: string) {
   const communities = await Community.find({
     currencies: currency,
     public: true,
   });
   const orderCount = await getOrderCountByCommunity();
   return communities.map(comm => {
-    comm.orders = orderCount[comm.id] || 0;
-    return comm;
+    return { ...comm, orders: orderCount[comm.id] || 0 };
   });
 }
 
-exports.setComm = async ctx => {
+export const setComm = async (ctx: MainContext) => {
   try {
     const { user } = ctx;
 
-    const [groupName] = await validateParams(
+    const [groupName] = (await validateParams(
       ctx,
       2,
       '\\<_@communityGroupName \\| telegram\\-group\\-id / off_\\>'
-    );
-    if (!groupName) {
-      return;
-    }
+    ))!;
 
     if (groupName === 'off') {
-      user.default_community_id = null;
+      user.default_community_id = undefined;
       await user.save();
       return await ctx.reply(ctx.i18n.t('no_default_community'));
     }
@@ -66,15 +65,14 @@ exports.setComm = async ctx => {
   }
 };
 
-exports.communityAdmin = async ctx => {
+export const communityAdmin = async (ctx: CommunityContext) => {
   try {
-    const [group] = await validateParams(ctx, 2, '\\<_community_\\>');
-    if (!group) return;
+    const [group] = (await validateParams(ctx, 2, '\\<_community_\\>'))!;
     const creator_id = ctx.user.id;
     const [community] = await Community.find({ group, creator_id });
     if (!community) throw new Error('CommunityNotFound');
     await ctx.scene.enter('COMMUNITY_ADMIN', { community });
-  } catch (err) {
+  } catch (err: any) {
     switch (err.message) {
       case 'CommunityNotFound': {
         return ctx.reply(ctx.i18n.t('community_not_found'));
@@ -86,7 +84,7 @@ exports.communityAdmin = async ctx => {
   }
 };
 
-exports.myComms = async ctx => {
+export const myComms = async (ctx: MainContext) => {
   try {
     const { user } = ctx;
 
@@ -101,10 +99,9 @@ exports.myComms = async ctx => {
   }
 };
 
-exports.findCommunity = async ctx => {
+export const findCommunity = async (ctx: CommunityContext) => {
   try {
-    const [fiatCode] = await validateParams(ctx, 2, '\\<_fiat code_\\>');
-    if (!fiatCode) return;
+    const [fiatCode] = (await validateParams(ctx, 2, '\\<_fiat code_\\>'))!;
 
     const communities = await findCommunities(fiatCode.toUpperCase());
     if (!communities.length) {
@@ -131,11 +128,11 @@ exports.findCommunity = async ctx => {
   }
 };
 
-exports.updateCommunity = async (ctx, id, field, bot) => {
+export const updateCommunity = async (ctx: CommunityContext, id: string, field: string, bot?: Telegraf<CommunityContext>) => {
   try {
     ctx.deleteMessage();
     if (!id) return;
-    const tgUser = ctx.update.callback_query.from;
+    const tgUser = (ctx.update as any).callback_query.from;
     if (!tgUser) return;
     const { user } = ctx;
 
@@ -202,10 +199,12 @@ exports.updateCommunity = async (ctx, id, field, bot) => {
   }
 };
 
-exports.deleteCommunity = async ctx => {
+export const deleteCommunity = async (ctx: CommunityContext) => {
   try {
     ctx.deleteMessage();
-    const id = ctx.match[1];
+    const id = ctx.match?.[1];
+    if(id === undefined)
+      throw new Error("id is undefined");
 
     if (!(await validateObjectId(ctx, id))) return;
     const community = await Community.findOne({
@@ -224,10 +223,12 @@ exports.deleteCommunity = async ctx => {
   }
 };
 
-exports.changeVisibility = async ctx => {
+export const changeVisibility = async (ctx: CommunityContext) => {
   try {
     ctx.deleteMessage();
-    const id = ctx.match[1];
+    const id = ctx.match?.[1];
+    if(id === undefined)
+      throw new Error("id is undefined");
 
     if (!(await validateObjectId(ctx, id))) return;
     const community = await Community.findOne({

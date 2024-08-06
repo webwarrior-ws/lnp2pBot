@@ -1,6 +1,15 @@
-const { Community, Order, User } = require('../../../models');
+import { ExtraReplyMessage } from 'telegraf/typings/telegram-types';
+import { Community, Order, User } from '../../../models';
+import { MainContext } from '../../start';
+import { CommunityContext } from './communityContext';
 
-const getOrdersNDays = async (days, communityId) => {
+interface OrderFilter {
+  status: string;
+  created_at: any;
+  community_id?: string;
+}
+
+const getOrdersNDays = async (days: number, communityId: (string | undefined)) => {
   const yesterday = new Date();
   yesterday.setHours(yesterday.getHours() - days * 24);
   const filter = {
@@ -8,13 +17,13 @@ const getOrdersNDays = async (days, communityId) => {
     created_at: {
       $gte: yesterday,
     },
-  };
+  } as OrderFilter;
   if (communityId) filter.community_id = communityId;
 
   return Order.count(filter);
 };
 
-const getVolumeNDays = async (days, communityId) => {
+const getVolumeNDays = async (days: number, communityId: (string | undefined)) => {
   const yesterday = new Date();
   yesterday.setHours(yesterday.getHours() - days * 24);
   const filter = {
@@ -22,7 +31,7 @@ const getVolumeNDays = async (days, communityId) => {
     created_at: {
       $gte: yesterday,
     },
-  };
+  } as OrderFilter;
   if (communityId) filter.community_id = communityId;
   const [row] = await Order.aggregate([
     {
@@ -42,9 +51,11 @@ const getVolumeNDays = async (days, communityId) => {
   return row.amount;
 };
 
-exports.onCommunityInfo = async ctx => {
-  const commId = ctx.match[1];
+export const onCommunityInfo = async (ctx: MainContext) => {
+  const commId = ctx.match?.[1];
   const community = await Community.findById(commId);
+  if(community === null)
+    throw new Error("community not found")
   const userCount = await User.count({ default_community_id: commId });
   const orderCount = await getOrdersNDays(1, commId);
   const volume = await getVolumeNDays(1, commId);
@@ -71,12 +82,12 @@ exports.onCommunityInfo = async ctx => {
   const text = `${community.name}\n${community.group}`;
   await ctx.reply(text, {
     reply_markup: { inline_keyboard: rows },
-  });
+  } as ExtraReplyMessage);
 };
 
-exports.onSetCommunity = async ctx => {
-  const tgId = ctx.update.callback_query.from.id;
-  const defaultCommunityId = ctx.match[1];
+export const onSetCommunity = async (ctx: CommunityContext) => {
+  const tgId = (ctx.update as any).callback_query.from.id;
+  const defaultCommunityId = ctx.match?.[1];
   await User.findOneAndUpdate(
     { tg_id: tgId },
     { default_community_id: defaultCommunityId }
@@ -84,9 +95,9 @@ exports.onSetCommunity = async ctx => {
   await ctx.reply(ctx.i18n.t('operation_successful'));
 };
 
-exports.withdrawEarnings = async ctx => {
+export const withdrawEarnings = async (ctx: CommunityContext) => {
   ctx.deleteMessage();
-  const community = await Community.findById(ctx.match[1]);
+  const community = await Community.findById(ctx.match?.[1]);
   ctx.scene.enter('ADD_EARNINGS_INVOICE_WIZARD_SCENE_ID', {
     community,
   });

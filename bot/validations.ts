@@ -683,7 +683,7 @@ const isBannedFromCommunity = async (user: UserDocument, communityId: string) =>
   }
 };
 
-module.exports = {
+export {
   validateSellOrder,
   validateBuyOrder,
   validateUser,
