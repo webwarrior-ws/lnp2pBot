@@ -1,28 +1,26 @@
-const {
-  validateFiatSentOrder,
-  validateReleaseOrder,
-} = require('./validations');
+import { validateFiatSentOrder, validateReleaseOrder } from './validations';
 const {
   createHoldInvoice,
   subscribeInvoice,
   cancelHoldInvoice,
   settleHoldInvoice,
 } = require('../ln');
-const { Order, User, Dispute } = require('../models');
-const messages = require('./messages');
-const {
-  getBtcFiatPrice,
-  deleteOrderFromChannel,
-  getUserI18nContext,
-  getFee,
-} = require('../util');
-const ordersActions = require('./ordersActions');
+import { Order, User, Dispute } from '../models';
+import * as messages from './messages';
+import { getBtcFiatPrice, deleteOrderFromChannel, getUserI18nContext, getFee } from '../util';
+import * as ordersActions from './ordersActions';
 const OrderEvents = require('./modules/events/orders');
 
-const { resolvLightningAddress } = require('../lnurl/lnurl-pay');
-const { logger } = require('../logger');
+import { resolvLightningAddress } from '../lnurl/lnurl-pay';
+import { logger } from '../logger';
+import { Telegraf } from 'telegraf';
+import { IOrder } from '../models/order';
+import { UserDocument } from '../models/user';
+import { MainContext } from './start';
+import { CommunityContext } from './modules/community/communityContext';
+import { Types } from 'mongoose';
 
-const waitPayment = async (ctx, bot, buyer, seller, order, buyerInvoice) => {
+const waitPayment = async (ctx: MainContext, bot: MainContext, buyer: UserDocument, seller: UserDocument, order: IOrder, buyerInvoice: any) => {
   try {
     // If there is not fiat amount the function don't do anything
     if (order.fiat_amount === undefined) {
@@ -63,13 +61,15 @@ const waitPayment = async (ctx, bot, buyer, seller, order, buyerInvoice) => {
       });
       order.hash = hash;
       order.secret = secret;
-      order.taken_at = Date.now();
+      order.taken_at = new Date();
       order.status = 'WAITING_PAYMENT';
       // We monitor the invoice to know when the seller makes the payment
       await subscribeInvoice(bot, hash);
 
       // We pass the buyer for rate and age calculations
       const buyer = await User.findById(order.buyer_id);
+      if(buyer === null)
+        throw new Error("buyer was not found");
       // We send the hold invoice to the seller
       await messages.invoicePaymentRequestMessage(
         ctx,
@@ -89,12 +89,12 @@ const waitPayment = async (ctx, bot, buyer, seller, order, buyerInvoice) => {
   }
 };
 
-const addInvoice = async (ctx, bot, order) => {
+const addInvoice = async (ctx: CommunityContext, bot: MainContext, order: IOrder | null) => {
   try {
     ctx.deleteMessage();
     ctx.scene.leave();
     if (!order) {
-      const orderId = ctx.update.callback_query.message.text;
+      const orderId = (ctx.update as any).callback_query.message.text;
       if (!orderId) return;
       order = await Order.findOne({ _id: orderId });
       if (!order) return;
@@ -106,6 +106,8 @@ const addInvoice = async (ctx, bot, order) => {
     }
 
     const buyer = await User.findOne({ _id: order.buyer_id });
+    if (buyer === null)
+      throw new Error("buyer was not found");
 
     if (order.fiat_amount === undefined) {
       ctx.scene.enter('ADD_FIAT_AMOUNT_WIZARD_SCENE_ID', {
@@ -116,9 +118,11 @@ const addInvoice = async (ctx, bot, order) => {
       return;
     }
 
-    let amount = order.amount;
+    let amount: number | undefined = order.amount;
     if (amount === 0) {
       amount = await getBtcFiatPrice(order.fiat_code, order.fiat_amount);
+      if(amount === undefined)
+        throw new Error("amount is undefined");
       const marginPercent = order.price_margin / 100;
       amount = amount - amount * marginPercent;
       amount = Math.floor(amount);
@@ -133,6 +137,8 @@ const addInvoice = async (ctx, bot, order) => {
     }
     await order.save();
     const seller = await User.findOne({ _id: order.seller_id });
+    if (seller === null)
+      throw new Error("seller was not found");
 
     if (buyer.lightning_address) {
       const laRes = await resolvLightningAddress(
@@ -172,21 +178,25 @@ const addInvoice = async (ctx, bot, order) => {
   }
 };
 
-const rateUser = async (ctx, bot, rating, orderId) => {
+const rateUser = async (ctx: CommunityContext, bot: MainContext, rating: number, orderId: string) => {
   try {
     ctx.deleteMessage();
     ctx.scene.leave();
-    const callerId = ctx.from.id;
+    const callerId = ctx.from?.id;
 
     if (!orderId) return;
     const order = await Order.findOne({ _id: orderId });
 
-    if (!order) return;
+    if (order === null) return;
     const buyer = await User.findOne({ _id: order.buyer_id });
+    if (buyer === null)
+      throw new Error("buyer was not found");
     const seller = await User.findOne({ _id: order.seller_id });
+    if (seller === null)
+      throw new Error("seller was not found");
 
     let targetUser = buyer;
-    if (callerId == buyer.tg_id) {
+    if (String(callerId) == buyer?.tg_id) {
       targetUser = seller;
     }
 
@@ -202,7 +212,7 @@ const rateUser = async (ctx, bot, rating, orderId) => {
   }
 };
 
-const saveUserReview = async (targetUser, rating) => {
+const saveUserReview = async (targetUser: UserDocument, rating: number) => {
   try {
     let totalReviews = targetUser.total_reviews
       ? targetUser.total_reviews
@@ -231,27 +241,27 @@ const saveUserReview = async (targetUser, rating) => {
   }
 };
 
-const cancelAddInvoice = async (ctx, order, job) => {
+const cancelAddInvoice = async (ctx: CommunityContext, order: IOrder | null, job?: any) => {
   try {
     let userAction = false;
     if (!job) {
       ctx.deleteMessage();
       ctx.scene.leave();
       userAction = true;
-      if (!order) {
-        const orderId = !!ctx && ctx.update.callback_query.message.text;
+      if (order === null) {
+        const orderId = !!ctx && (ctx.update as any).callback_query.message.text;
         if (!orderId) return;
         order = await Order.findOne({ _id: orderId });
-        if (!order) return;
       }
     }
+    if (order === null) return;
 
     // We make sure the seller can't send us sats now
     await cancelHoldInvoice({ hash: order.hash });
 
     const user = await User.findOne({ _id: order.buyer_id });
 
-    if (!user) return;
+    if (user == null) return;
 
     const i18nCtx = await getUserI18nContext(user);
     // Buyers only can cancel orders with status WAITING_BUYER_INVOICE
@@ -259,6 +269,8 @@ const cancelAddInvoice = async (ctx, order, job) => {
       return await messages.genericErrorMessage(ctx, user, i18nCtx);
 
     const sellerUser = await User.findOne({ _id: order.seller_id });
+    if(sellerUser === null)
+      throw new Error("sellerUser was not found");
     if (order.creator_id === order.buyer_id) {
       order.status = 'CLOSED';
       await order.save();
@@ -340,14 +352,14 @@ const cancelAddInvoice = async (ctx, order, job) => {
   }
 };
 
-const showHoldInvoice = async (ctx, bot, order) => {
+const showHoldInvoice = async (ctx: CommunityContext, bot: MainContext, order: IOrder | null) => {
   try {
     ctx.deleteMessage();
     if (!order) {
-      const orderId = ctx.update.callback_query.message.text;
+      const orderId = (ctx.update as any).callback_query.message.text;
       if (!orderId) return;
       order = await Order.findOne({ _id: orderId });
-      if (!order) return;
+      if (order === null) return;
     }
 
     const user = await User.findOne({ _id: order.seller_id });
@@ -378,6 +390,8 @@ const showHoldInvoice = async (ctx, bot, order) => {
     let amount;
     if (order.amount === 0) {
       amount = await getBtcFiatPrice(order.fiat_code, order.fiat_amount);
+      if(amount === undefined)
+        throw new Error("amount is undefined");
       const marginPercent = order.price_margin / 100;
       amount = amount - amount * marginPercent;
       amount = Math.floor(amount);
@@ -407,20 +421,20 @@ const showHoldInvoice = async (ctx, bot, order) => {
   }
 };
 
-const cancelShowHoldInvoice = async (ctx, order, job) => {
+const cancelShowHoldInvoice = async (ctx: CommunityContext, order: IOrder | null, job?: any) => {
   try {
     let userAction = false;
     if (!job) {
       ctx.deleteMessage();
       ctx.scene.leave();
       userAction = true;
-      if (!order) {
-        const orderId = !!ctx && ctx.update.callback_query.message.text;
+      if (order === null) {
+        const orderId = !!ctx && (ctx.update as any).callback_query.message.text;
         if (!orderId) return;
         order = await Order.findOne({ _id: orderId });
-        if (!order) return;
       }
     }
+    if (order === null) return;
 
     // We make sure the seller can't send us sats now
     await cancelHoldInvoice({ hash: order.hash });
@@ -433,6 +447,8 @@ const cancelShowHoldInvoice = async (ctx, order, job) => {
       return await messages.genericErrorMessage(ctx, user, i18nCtx);
 
     const buyerUser = await User.findOne({ _id: order.buyer_id });
+    if(buyerUser === null)
+      throw new Error("buyerUser was not found");
     if (order.creator_id === order.seller_id) {
       order.status = 'CLOSED';
       await order.save();
@@ -521,17 +537,19 @@ const cancelShowHoldInvoice = async (ctx, order, job) => {
  * @param {*} order
  * @returns
  */
-const addInvoicePHI = async (ctx, bot, orderId) => {
+const addInvoicePHI = async (ctx: CommunityContext, bot: MainContext, orderId: string) => {
   try {
     ctx.deleteMessage();
     const order = await Order.findOne({ _id: orderId });
+    if (order === null)
+      throw new Error("order was not found");
     // orders with status PAID_HOLD_INVOICE are released payments
     if (order.status !== 'PAID_HOLD_INVOICE' && order.status !== 'FROZEN') {
       return;
     }
 
     const buyer = await User.findOne({ _id: order.buyer_id });
-    if (!buyer) return;
+    if (buyer === null) return;
     if (order.amount === 0) {
       await messages.genericErrorMessage(bot, buyer, ctx.i18n);
       return;
@@ -543,16 +561,16 @@ const addInvoicePHI = async (ctx, bot, orderId) => {
   }
 };
 
-const cancelOrder = async (ctx, orderId, user) => {
+const cancelOrder = async (ctx: CommunityContext, orderId: string, user: UserDocument | null) => {
   try {
-    if (!user) {
-      const tgUser = ctx.update.callback_query.from;
+    if (user === null) {
+      const tgUser = (ctx.update as any).callback_query.from;
       if (!tgUser) return;
 
       user = await User.findOne({ tg_id: tgUser.id });
 
       // If user didn't initialize the bot we can't do anything
-      if (!user) return;
+      if (user == null) return;
     }
     if (user.banned) return await messages.bannedUserErrorMessage(ctx, user);
     const order = await ordersActions.getOrder(ctx, user, orderId);
@@ -610,18 +628,23 @@ const cancelOrder = async (ctx, orderId, user) => {
       initiator = 'seller';
       counterParty = 'buyer';
     }
+    if (counterPartyUser == null)
+      throw new Error("counterPartyUser was not found");
 
-    if (order[`${initiator}_cooperativecancel`])
+    const initiatorCooperativeCancelProperty = 
+      initiator == 'seller' ? 'seller_cooperativecancel' : 'buyer_cooperativecancel';
+      
+    if (order[initiatorCooperativeCancelProperty])
       return await messages.shouldWaitCooperativeCancelMessage(
         ctx,
         initiatorUser
       );
 
-    order[`${initiator}_cooperativecancel`] = true;
+    order[initiatorCooperativeCancelProperty] = true;
 
     const i18nCtxCP = await getUserI18nContext(counterPartyUser);
     // If the counter party already requested a cooperative cancel order
-    if (order[`${counterParty}_cooperativecancel`]) {
+    if (counterParty == 'seller' ? order.seller_cooperativecancel : order.buyer_cooperativecancel) {
       // If we already have a holdInvoice we cancel it and return the money
       if (order.hash) await cancelHoldInvoice({ hash: order.hash });
 
@@ -663,10 +686,10 @@ const cancelOrder = async (ctx, orderId, user) => {
   }
 };
 
-const fiatSent = async (ctx, orderId, user) => {
+const fiatSent = async (ctx: MainContext, orderId: string, user: UserDocument | null) => {
   try {
     if (!user) {
-      const tgUser = ctx.update.callback_query.from;
+      const tgUser = (ctx.update as any).callback_query.from;
       if (!tgUser) return;
 
       user = await User.findOne({ tg_id: tgUser.id });
@@ -680,6 +703,8 @@ const fiatSent = async (ctx, orderId, user) => {
 
     order.status = 'FIAT_SENT';
     const seller = await User.findOne({ _id: order.seller_id });
+    if (seller === null)
+      throw new Error("seller was not found");
     await order.save();
     OrderEvents.orderUpdated(order);
     // We sent messages to both parties
@@ -698,10 +723,10 @@ const fiatSent = async (ctx, orderId, user) => {
   }
 };
 
-const release = async (ctx, orderId, user) => {
+const release = async (ctx: MainContext, orderId: string, user: UserDocument | null) => {
   try {
     if (!user) {
-      const tgUser = ctx.update.callback_query.from;
+      const tgUser = (ctx.update as any).callback_query.from;
       if (!tgUser) return;
 
       user = await User.findOne({ tg_id: tgUser.id });
@@ -726,7 +751,7 @@ const release = async (ctx, orderId, user) => {
   }
 };
 
-module.exports = {
+export {
   rateUser,
   saveUserReview,
   cancelAddInvoice,
