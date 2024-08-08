@@ -1,4 +1,4 @@
-import { MainContext, OrderQuery, ctxUpdateAssertMsg } from "./start";
+import { HasTelegram, MainContext, OrderQuery, ctxUpdateAssertMsg } from "./start";
 import { ICommunity } from "../models/community";
 import { FilterQuery } from "mongoose";
 import { UserDocument } from "../models/user";
@@ -426,7 +426,7 @@ const isOrderCreator = (user: UserDocument, order: IOrder) => {
   }
 };
 
-const validateTakeSellOrder = async (ctx: MainContext, bot: MainContext, user: UserDocument, order: IOrder) => {
+const validateTakeSellOrder = async (ctx: MainContext, bot: HasTelegram, user: UserDocument, order: IOrder) => {
   try {
     if (!order) {
       await messages.invalidOrderMessage(ctx, bot, user);
@@ -455,7 +455,7 @@ const validateTakeSellOrder = async (ctx: MainContext, bot: MainContext, user: U
   }
 };
 
-const validateTakeBuyOrder = async (ctx: MainContext, bot: MainContext, user: UserDocument, order: IOrder) => {
+const validateTakeBuyOrder = async (ctx: MainContext, bot: HasTelegram, user: UserDocument, order: IOrder) => {
   try {
     if (!order) {
       await messages.invalidOrderMessage(ctx, bot, user);
