@@ -9,18 +9,18 @@ import { Order, User, Dispute } from '../models';
 import * as messages from './messages';
 import { getBtcFiatPrice, deleteOrderFromChannel, getUserI18nContext, getFee } from '../util';
 import * as ordersActions from './ordersActions';
-const OrderEvents = require('./modules/events/orders');
+import * as OrderEvents from './modules/events/orders';
 
 import { resolvLightningAddress } from '../lnurl/lnurl-pay';
 import { logger } from '../logger';
 import { Telegraf } from 'telegraf';
 import { IOrder } from '../models/order';
 import { UserDocument } from '../models/user';
-import { MainContext } from './start';
+import { HasTelegram, MainContext } from './start';
 import { CommunityContext } from './modules/community/communityContext';
 import { Types } from 'mongoose';
 
-const waitPayment = async (ctx: MainContext, bot: MainContext, buyer: UserDocument, seller: UserDocument, order: IOrder, buyerInvoice: any) => {
+const waitPayment = async (ctx: MainContext, bot: HasTelegram, buyer: UserDocument, seller: UserDocument, order: IOrder, buyerInvoice: any) => {
   try {
     // If there is not fiat amount the function don't do anything
     if (order.fiat_amount === undefined) {
@@ -89,7 +89,7 @@ const waitPayment = async (ctx: MainContext, bot: MainContext, buyer: UserDocume
   }
 };
 
-const addInvoice = async (ctx: CommunityContext, bot: MainContext, order: IOrder | null) => {
+const addInvoice = async (ctx: CommunityContext, bot: HasTelegram, order: IOrder | null = null) => {
   try {
     ctx.deleteMessage();
     ctx.scene.leave();
@@ -178,7 +178,7 @@ const addInvoice = async (ctx: CommunityContext, bot: MainContext, order: IOrder
   }
 };
 
-const rateUser = async (ctx: CommunityContext, bot: MainContext, rating: number, orderId: string) => {
+const rateUser = async (ctx: CommunityContext, bot: HasTelegram, rating: number, orderId: string) => {
   try {
     ctx.deleteMessage();
     ctx.scene.leave();
@@ -241,7 +241,7 @@ const saveUserReview = async (targetUser: UserDocument, rating: number) => {
   }
 };
 
-const cancelAddInvoice = async (ctx: CommunityContext, order: IOrder | null, job?: any) => {
+const cancelAddInvoice = async (ctx: CommunityContext, order: IOrder | null = null, job?: any) => {
   try {
     let userAction = false;
     if (!job) {
@@ -352,7 +352,7 @@ const cancelAddInvoice = async (ctx: CommunityContext, order: IOrder | null, job
   }
 };
 
-const showHoldInvoice = async (ctx: CommunityContext, bot: MainContext, order: IOrder | null) => {
+const showHoldInvoice = async (ctx: CommunityContext, bot: HasTelegram, order: IOrder | null = null) => {
   try {
     ctx.deleteMessage();
     if (!order) {
@@ -421,7 +421,7 @@ const showHoldInvoice = async (ctx: CommunityContext, bot: MainContext, order: I
   }
 };
 
-const cancelShowHoldInvoice = async (ctx: CommunityContext, order: IOrder | null, job?: any) => {
+const cancelShowHoldInvoice = async (ctx: CommunityContext, order: IOrder | null = null, job?: any) => {
   try {
     let userAction = false;
     if (!job) {
@@ -537,7 +537,7 @@ const cancelShowHoldInvoice = async (ctx: CommunityContext, order: IOrder | null
  * @param {*} order
  * @returns
  */
-const addInvoicePHI = async (ctx: CommunityContext, bot: MainContext, orderId: string) => {
+const addInvoicePHI = async (ctx: CommunityContext, bot: HasTelegram, orderId: string) => {
   try {
     ctx.deleteMessage();
     const order = await Order.findOne({ _id: orderId });
@@ -561,7 +561,7 @@ const addInvoicePHI = async (ctx: CommunityContext, bot: MainContext, orderId: s
   }
 };
 
-const cancelOrder = async (ctx: CommunityContext, orderId: string, user: UserDocument | null) => {
+const cancelOrder = async (ctx: CommunityContext, orderId: string, user: UserDocument | null = null) => {
   try {
     if (user === null) {
       const tgUser = (ctx.update as any).callback_query.from;
@@ -686,7 +686,7 @@ const cancelOrder = async (ctx: CommunityContext, orderId: string, user: UserDoc
   }
 };
 
-const fiatSent = async (ctx: MainContext, orderId: string, user: UserDocument | null) => {
+const fiatSent = async (ctx: MainContext, orderId: string, user: UserDocument | null = null) => {
   try {
     if (!user) {
       const tgUser = (ctx.update as any).callback_query.from;
@@ -723,7 +723,7 @@ const fiatSent = async (ctx: MainContext, orderId: string, user: UserDocument | 
   }
 };
 
-const release = async (ctx: MainContext, orderId: string, user: UserDocument | null) => {
+const release = async (ctx: MainContext, orderId: string, user: UserDocument | null = null) => {
   try {
     if (!user) {
       const tgUser = (ctx.update as any).callback_query.from;

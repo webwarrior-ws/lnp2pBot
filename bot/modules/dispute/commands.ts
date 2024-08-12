@@ -3,9 +3,9 @@ import { MainContext } from "../../start";
 import { User, Dispute, Order } from '../../../models';
 import { validateParams, validateObjectId, validateDisputeOrder } from '../../validations';
 import * as messages from './messages';
-const globalMessages = require('../../messages');
+import * as globalMessages from '../../messages';
 import { logger } from '../../../logger';
-const OrderEvents = require('../../modules/events/orders');
+import * as OrderEvents from '../../modules/events/orders';
 import { removeAtSymbol } from '../../../util';
 
 const dispute = async (ctx: MainContext) => {
