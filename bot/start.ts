@@ -277,6 +277,7 @@ const initialize = (botToken: string, options: Partial<Telegraf.Options<Communit
 
         return await messages.showConfirmationButtons(ctx, orders, command);
       } else if (!(await validateObjectId(ctx, orderId))) {
+        // eslint-disable-next-line no-useless-return
         return;
       } else {
         await release(ctx, orderId, ctx.user);
@@ -408,6 +409,7 @@ const initialize = (botToken: string, options: Partial<Telegraf.Options<Communit
 
         return await messages.showConfirmationButtons(ctx, orders, command);
       } else if (!(await validateObjectId(ctx, orderId))) {
+        // eslint-disable-next-line no-useless-return
         return;
       } else {
         await cancelOrder(ctx, orderId, ctx.user);
@@ -624,6 +626,7 @@ const initialize = (botToken: string, options: Partial<Telegraf.Options<Communit
 
         return await messages.showConfirmationButtons(ctx, orders, command);
       } else if (!(await validateObjectId(ctx, orderId))) {
+        // eslint-disable-next-line no-useless-return
         return;
       } else {
         await fiatSent(ctx, orderId, ctx.user);
