@@ -1,5 +1,4 @@
 import { TelegramError, Telegraf } from 'telegraf'
-import QR from 'qrcode';
 import {
   getCurrency,
   numberFormat,
@@ -12,6 +11,7 @@ import {
   decimalRound,
   getUserAge,
   getStars,
+  generateQRWithImage,
 } from '../util';
 import * as OrderEvents from './modules/events/orders';
 import { logger } from "../logger";
@@ -23,7 +23,6 @@ import { IConfig } from '../models/config';
 import { IPendingPayment } from '../models/pending_payment';
 import { PayViaPaymentRequestResult } from 'lightning';
 import { IFiat } from '../util/fiatModel';
-import { generateQRWithImage } from '../util';
 import { CommunityContext } from './modules/community/communityContext';
 
 const startMessage = async (ctx: MainContext) => {
