@@ -1,8 +1,3 @@
-const { expect } = require('chai');
-const sinon = require('sinon');
-const { ObjectId } = require('mongoose').Types;
-const proxyquire = require('proxyquire');
-
 import {
   validateSellOrder,
   validateBuyOrder,
@@ -20,6 +15,11 @@ import {
 import * as messages from '../../bot/messages';
 import { Order, User, Community } from '../../models';
 import { IOrder } from '../../models/order';
+
+const { expect } = require('chai');
+const sinon = require('sinon');
+const { ObjectId } = require('mongoose').Types;
+const proxyquire = require('proxyquire');
 
 describe('Validations', () => {
   let ctx: any;
